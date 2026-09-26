@@ -1,0 +1,42 @@
+# Standalone test-mode Waffo example. Use your own Test API key, store and one-time product.
+# api.waffo.ai is the official API origin; checkout.example.com is a placeholder.
+# Replace checkout_origins with the exact origin returned by your authorized provider.
+[server]
+listen = "127.0.0.1:8080"
+public_url = "https://pay.lmm.best"
+database = "data/waffo-test.sqlite3"
+
+[[merchants]]
+id = "app"
+api_key_env = "PAY_APP_API_KEY"
+webhook_secret_env = "PAY_APP_WEBHOOK_SECRET"
+webhook_url = "https://merchant.example.com/payment-notifications"
+default_gateway = "pancake-test"
+gateways = ["pancake-test"]
+
+[[gateways]]
+id = "pancake-test"
+protocol = "waffo_pancake"
+base_url = "https://api.waffo.ai"
+checkout_origins = ["https://checkout.example.com"]
+currencies = ["USD", "CNY"]
+methods = ["checkout"]
+[gateways.waffo]
+merchant_id = "MER_REPLACE"
+store_id = "STO_REPLACE"
+mode = "test"
+private_key_env = "WAFFO_TEST_PRIVATE_KEY"
+public_key_env = "WAFFO_TEST_WEBHOOK_PUBLIC_KEY"
+[[gateways.waffo.products]]
+alias = "credits"
+id = "PROD_REPLACE"
+tax_category = "digital_goods"
+# Explicitly choose whether amount_minor describes the final total or subtotal.
+# In subtotal mode the signed callback must include listPrice.subtotal and
+# actual chargedAmount must equal listPrice.total. No implicit currency conversion.
+amount_basis = "total"
+
+# Configure https://pay.lmm.best/hooks/pancake-test in your Waffo dashboard.
+# Subscribe to order.completed. Use a ONE-TIME product, not a subscription product.
+# Test and production must use different gateway IDs, databases/merchants as appropriate,
+# and their corresponding public/private keys. Never use a test event to grant live goods.

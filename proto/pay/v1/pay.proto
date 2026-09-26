@@ -1,0 +1,50 @@
+syntax = "proto3";
+package pay.v1;
+
+// HTTP message bodies, not gRPC. Amounts are integer minor currency units.
+message CreatePaymentRequest {
+  string merchant_order_id = 1;
+  int64 amount_minor = 2;
+  string currency = 3;
+  string method = 4;
+  string gateway_id = 5; // Empty selects the merchant's configured default.
+  string product = 6; // Required Waffo product alias; unused by ePay.
+  string description = 7;
+}
+message Payment {
+  string id = 1;
+  string merchant_order_id = 2;
+  string gateway_id = 3;
+  int64 amount_minor = 4;
+  string currency = 5;
+  string method = 6;
+  string status = 7; // creating, pending, unknown, succeeded
+  string checkout_url = 8;
+  string provider_order_id = 9;
+  int64 created_at = 10; // Unix seconds
+  int64 updated_at = 11;
+  string amount_basis = 12; // total or subtotal
+  int64 charged_minor = 13; // Zero until a verified payment is received.
+  string notification_status = 14; // not_scheduled, pending, delivering, delivered, dead
+}
+message Gateway {
+  string id = 1;
+  string protocol = 2;
+  repeated string currencies = 3;
+  repeated string methods = 4;
+  repeated string products = 5;
+  bool checkout = 6;
+  bool signed_webhook = 7;
+  bool refunds = 8;
+  bool subscriptions = 9;
+  bool upstream_query = 10;
+}
+message GatewayList { repeated Gateway gateways = 1; }
+message ErrorResponse { string code = 1; }
+// Outbound merchant notifications currently use JSON of this same schema.
+message PaymentEvent {
+  string id = 1;
+  string event_type = 2;
+  int64 occurred_at = 3;
+  Payment payment = 4;
+}

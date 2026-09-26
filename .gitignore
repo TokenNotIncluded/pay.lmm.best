@@ -1,0 +1,11 @@
+/target/
+/data/
+.env
+.env.*
+!.env.example
+config.toml
+*.pem
+*.key
+*.sqlite*
+*.db*
+*.lockfile

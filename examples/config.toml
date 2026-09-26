@@ -1,0 +1,28 @@
+# Copy to config.toml and replace example domains. No secrets belong here.
+[server]
+listen = "127.0.0.1:8080"
+public_url = "https://pay.lmm.best"
+database = "data/pay.sqlite3"
+max_concurrency = 32
+max_body_bytes = 65536
+db_cache_kib = 2048
+allow_loopback_http = false
+
+[[merchants]]
+id = "app"
+api_key_env = "PAY_APP_API_KEY"
+webhook_secret_env = "PAY_APP_WEBHOOK_SECRET"
+webhook_url = "https://merchant.example.com/payment-notifications"
+default_gateway = "epay-main"
+gateways = ["epay-main"]
+
+[[gateways]]
+id = "epay-main"
+protocol = "epay"
+base_url = "https://epay.example.com"
+checkout_origins = ["https://epay.example.com"]
+currencies = ["CNY"]
+methods = ["alipay", "wxpay"]
+[gateways.epay]
+pid = "REPLACE_WITH_YOUR_PID"
+key_env = "EPAY_KEY"

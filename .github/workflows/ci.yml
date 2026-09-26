@@ -1,0 +1,71 @@
+name: Rust CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: sudo apt-get update -qq && sudo apt-get install -y protobuf-compiler
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format working tree
+        run: cargo fmt --all
+      - name: Tests
+        run: cargo test --all-targets
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Release build
+        run: cargo build --release
+      - name: Save formatted source and lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-and-lock
+          path: |
+            Cargo.lock
+            src/
+            tests/
+            build.rs
+      - name: Save Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: pay-lmm-linux-amd64
+          path: target/release/pay-lmm
+  # One-time repository initialization: remove after Cargo.lock is committed.
+  bootstrap-lock:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check whether bootstrap is needed
+        id: check
+        run: test -f Cargo.lock || echo 'needed=true' >> "$GITHUB_OUTPUT"
+      - if: steps.check.outputs.needed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: source-and-lock
+          path: .
+      - if: steps.check.outputs.needed == 'true'
+        name: Commit initial lockfile and normalized Rust formatting
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock src tests build.rs
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: lock dependencies and normalize Rust formatting'
+            git push
+          fi

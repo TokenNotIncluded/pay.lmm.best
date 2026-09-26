@@ -1,0 +1,7 @@
+pay.lmm.best {
+    request_body {
+        max_size 64KB
+    }
+    reverse_proxy 127.0.0.1:8080
+    # Do not enable query-string/body logging for payment callbacks.
+}

@@ -1,0 +1,9 @@
+.git
+target
+data
+config.toml
+.env
+.env.*
+*.pem
+*.key
+*.sqlite*

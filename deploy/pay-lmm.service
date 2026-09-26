@@ -1,0 +1,32 @@
+[Unit]
+Description=pay.lmm.best payment gateway protocol aggregation service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pay-lmm
+Group=pay-lmm
+WorkingDirectory=/var/lib/pay-lmm
+EnvironmentFile=/etc/pay.lmm.best/secrets.env
+ExecStart=/usr/local/bin/pay-lmm --config /etc/pay.lmm.best/config.toml
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pay-lmm
+StateDirectory=pay-lmm
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+TasksMax=32
+LimitNOFILE=1024
+# Measure your workload before tightening this limit. It is not a claimed RSS figure.
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

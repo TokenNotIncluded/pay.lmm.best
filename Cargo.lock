@@ -753,7 +753,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "fs2",
  "hex",
  "md-5",

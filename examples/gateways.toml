@@ -1,0 +1,67 @@
+# Standalone TEST configuration for the three additional hosted-checkout adapters.
+# Replace all merchant URLs, product/variant IDs and checkout origin placeholders.
+# No API keys or webhook secret VALUES belong in this file.
+[server]
+listen = "127.0.0.1:8080"
+public_url = "https://pay.lmm.best"
+database = "data/hosted-test.sqlite3"
+
+[[merchants]]
+id = "app-test"
+api_key_env = "PAY_TEST_API_KEY"
+webhook_secret_env = "PAY_TEST_WEBHOOK_SECRET"
+webhook_url = "https://merchant.example.com/test/payment-notifications"
+default_gateway = "stripe-test"
+gateways = ["stripe-test", "creem-test", "lemon-test"]
+
+[[gateways]]
+id = "stripe-test"
+protocol = "stripe"
+base_url = "https://api.stripe.com"
+checkout_origins = ["https://checkout.stripe.com"]
+currencies = ["USD", "CNY", "EUR", "JPY"]
+methods = ["checkout", "card", "alipay"]
+[gateways.stripe]
+api_key_env = "STRIPE_TEST_API_KEY"
+webhook_secret_env = "STRIPE_TEST_WEBHOOK_SECRET"
+mode = "test"
+# Explicit compatibility target, not a claim this is the latest Stripe version.
+api_version = "2025-06-30.basil"
+
+[[gateways]]
+id = "creem-test"
+protocol = "creem"
+base_url = "https://test-api.creem.io"
+# Replace with the exact origin of your provider-generated checkout URL.
+checkout_origins = ["https://checkout.example.com"]
+currencies = ["USD"]
+methods = ["checkout"]
+[gateways.creem]
+api_key_env = "CREEM_TEST_API_KEY"
+webhook_secret_env = "CREEM_TEST_WEBHOOK_SECRET"
+mode = "test"
+[[gateways.creem.products]]
+alias = "credits"
+id = "prod_REPLACE"
+currency = "USD"
+# The upstream product must be onetime, active and tax inclusive, without B2B net pricing.
+
+[[gateways]]
+id = "lemon-test"
+protocol = "lemon_squeezy"
+base_url = "https://api.lemonsqueezy.com"
+checkout_origins = ["https://your-store.lemonsqueezy.com"]
+# Exactly one two-decimal store currency. The store currency is fetched and checked.
+currencies = ["USD"]
+methods = ["checkout"]
+[gateways.lemon_squeezy]
+api_key_env = "LEMON_TEST_API_KEY"
+webhook_secret_env = "LEMON_TEST_WEBHOOK_SECRET"
+mode = "test"
+store_id = "123"
+[[gateways.lemon_squeezy.products]]
+alias = "credits"
+id = "456"
+# Use subtotal for tax-exclusive variants; total for tax-inclusive variants.
+# The API preview and signed paid order must match this explicit amount basis.
+amount_basis = "subtotal"

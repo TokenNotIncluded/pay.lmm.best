@@ -1,0 +1,53 @@
+name: Provider integration check
+on:
+  push:
+    branches: [work/more-gateways]
+permissions:
+  contents: write
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: provider-integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: sudo apt-get update -qq && sudo apt-get install -y protobuf-compiler openssl
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          shared-key: provider-integration
+      - name: Apply reviewed integration changes
+        run: python3 .integration/apply.py
+      - name: Format and test
+        run: |
+          cargo fmt --all
+          cargo test --locked --all-targets | tee provider-tests.log
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo build --locked --release
+          python3 scripts/smoke.py --binary target/release/pay-lmm | tee provider-smoke.json
+      - name: Save check evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: provider-checks
+          path: |
+            provider-tests.log
+            provider-smoke.json
+            src/
+            tests/
+      - name: Persist only validated source on the working branch
+        run: |
+          rm -rf .integration .github/workflows/prepare-gateways.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src tests README.md web proto .integration .github/workflows/prepare-gateways.yml
+          git commit -m 'feat: integrate and format verified hosted gateway adapters'
+          git push origin HEAD:refs/heads/work/more-gateways

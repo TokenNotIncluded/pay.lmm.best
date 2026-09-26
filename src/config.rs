@@ -55,18 +55,31 @@ pub struct GatewayConfig {
     pub methods: Vec<String>,
     pub epay: Option<EpayConfig>,
     pub waffo: Option<WaffoConfig>,
+    // Omitting absent NEW fields preserves the frozen identity of existing gateways.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stripe: Option<crate::providers::StripeConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub creem: Option<crate::providers::CreemConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lemon_squeezy: Option<crate::providers::LemonConfig>,
 }
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Protocol {
     Epay,
     WaffoPancake,
+    Stripe,
+    Creem,
+    LemonSqueezy,
 }
 impl Protocol {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Epay => "epay",
             Self::WaffoPancake => "waffo_pancake",
+            Self::Stripe => "stripe",
+            Self::Creem => "creem",
+            Self::LemonSqueezy => "lemon_squeezy",
         }
     }
 }
@@ -185,7 +198,9 @@ impl Config {
                 !g.methods.is_empty() && unique(g.methods.clone()),
                 "methods must be nonempty and unique"
             );
+            crate::providers::validate_config(g, dev)?;
             match g.protocol {
+                Protocol::Stripe | Protocol::Creem | Protocol::LemonSqueezy => {}
                 Protocol::Epay => {
                     anyhow::ensure!(g.waffo.is_none(), "unexpected waffo configuration for epay");
                     let c = g

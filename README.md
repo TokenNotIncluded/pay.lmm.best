@@ -18,12 +18,17 @@
 
 ## 当前支持
 
+已接入 **5 种上游协议**：ePay、Waffo Pancake、Stripe Checkout、Creem、Lemon Squeezy。新渠道共用现有 JSON / Protobuf API，没有新增运行时依赖。详细配置、支持边界和官方协议来源见 [网关接入指南](docs/gateways.md)。
+
 | 接口 / 适配器 | 已实现 | 明确不做 |
 | --- | --- | --- |
 | 统一 HTTP API | 创建订单、查询本地状态、商户渠道列表、死信重投 | 不宣称兼容上游的所有接口 |
 | Protocol Buffers | 同一路由上的二进制请求与响应，schema 在 `proto/pay/v1/pay.proto` | 当前不是 gRPC |
 | ePay v1 | `submit.php` 签名跳转、GET / POST 回调、MD5 兼容验签、CNY | 不自动换汇、不冒充支付宝或微信直连 |
 | Waffo Pancake | RSA-SHA256 创建一次性 checkout、显式商品映射、验签、店铺及环境绑定 | 不自动发布商品、不把订阅事件当一次性付款 |
+| Stripe Checkout | 一次性收银台、签名验真、延迟支付完成事件 | 不含 Connect、订阅、自动换汇或折扣 |
+| Creem | 一次性商品检查、自定义价格、HMAC 回调、测试/生产绑定 | 当前只接受含税价商品，不含订阅 |
+| Lemon Squeezy | JSON:API checkout、店铺/商品检查、预览金额验证、签名订单回调 | 单店铺币种、单商品，不含订阅/优惠券 |
 | 通知交付 | SQLite 事务 outbox、HMAC-SHA256、持久化去重、16 次投递、死信重投 | 不保证网络交付 exactly-once；接收方仍需按事件 ID 去重 |
 
 退款发起、订阅续费、上游主动查单、自动对账尚未实现，渠道能力接口明确返回 `false`，没有“成功返回”的占位实现。`GET /v1/payments/{id}` 返回的是**本地已验证状态**，不调用上游查单。

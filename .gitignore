@@ -1,10 +1,12 @@
 /target/
 /dist/
+/qa/
 /data/
 .env
 .env.*
 !.env.example
 config.toml
+secrets.env
 *.pem
 *.key
 *.sqlite*

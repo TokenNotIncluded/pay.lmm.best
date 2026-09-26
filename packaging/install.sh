@@ -23,7 +23,6 @@ fi
 if [ "$uninstall" = yes ]; then
     if [ "$system" = yes ]; then
         [ ! -f "$prefix/lib/pay-lmm/maintainer.sh" ] || sh "$prefix/lib/pay-lmm/maintainer.sh" stop
-        # Only remove units carrying our installer ownership marker.
         for f in /etc/systemd/system/pay-lmm.service /etc/init.d/pay-lmm; do
             if [ -f "$f" ] && grep -q '^# Installed by pay-lmm archive installer$' "$f"; then rm -f "$f"; fi
         done
@@ -36,7 +35,6 @@ if [ "$uninstall" = yes ]; then
 fi
 base=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 cd "$base"
-# Outer release checksums must also be verified before extracting the archive.
 sha256sum -c SHA256SUMS
 case "$(uname -s):$(uname -m)" in
     Linux:x86_64) arch=amd64 ;;
@@ -58,7 +56,7 @@ cp pay-lmm "$tmp"
 chmod 0755 "$tmp"
 "$tmp" --version
 mv -f "$tmp" "$prefix/bin/pay-lmm"
-for f in README.md LICENSE SECURITY.md build-info.json; do cp "$f" "$prefix/share/doc/pay-lmm/"; done
+for f in README.md LICENSE SECURITY.md build-info.json THIRD-PARTY-NOTICES.txt dependencies.json; do cp "$f" "$prefix/share/doc/pay-lmm/"; done
 for d in examples docs proto deploy; do cp -R "$d" "$prefix/share/doc/pay-lmm/"; done
 cp deploy/maintainer.sh "$prefix/lib/pay-lmm/maintainer.sh"
 chmod 0755 "$prefix/lib/pay-lmm/maintainer.sh"

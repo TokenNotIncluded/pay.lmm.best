@@ -21,7 +21,11 @@ start_pre() {
         eerror "Configure config.toml and secrets.env before starting pay-lmm"
         return 1
     fi
-    # Operator-owned shell assignments only. This file must be root-owned mode 0600.
+    if [ -L /etc/pay.lmm.best/secrets.env ] || [ "$(stat -c '%u:%a' /etc/pay.lmm.best/secrets.env)" != '0:600' ]; then
+        eerror "secrets.env must be a regular root-owned file with mode 0600"
+        return 1
+    fi
+    # Operator-controlled shell assignments, never untrusted application input.
     set -a
     . /etc/pay.lmm.best/secrets.env
     set +a

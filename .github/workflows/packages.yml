@@ -34,9 +34,12 @@ jobs:
           persist-credentials: false
       - name: Install native packaging tools
         run: sudo apt-get update -qq && sudo apt-get install -y build-essential musl-tools protobuf-compiler openssl rpm dpkg-dev xz-utils
+      - name: Read pinned toolchain
+        id: rust
+        run: python3 -c 'import tomllib; print("version=" + tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])' >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
-          toolchain: '1.98.1'
+          toolchain: ${{ steps.rust.outputs.version }}
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
@@ -161,7 +164,9 @@ jobs:
         run: |
           test "$GITHUB_REF_NAME" = "v$(python3 packaging/package.py version)"
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          # A network/authentication failure is NOT evidence that a release is absent.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name' > existing-releases.txt
+          if grep -Fxq -- "$GITHUB_REF_NAME" existing-releases.txt; then
             echo 'A release already exists; refusing to replace published assets.' >&2
             exit 1
           fi

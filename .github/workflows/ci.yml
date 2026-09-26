@@ -12,47 +12,43 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
       - name: Install build prerequisites
         run: sudo apt-get update -qq && sudo apt-get install -y protobuf-compiler openssl
+      - name: Read pinned toolchain
+        id: rust
+        run: python3 -c 'import tomllib; print("version=" + tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])' >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
-          toolchain: stable
+          toolchain: ${{ steps.rust.outputs.version }}
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Tests
         run: cargo test --locked --all-targets
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
-      - name: Release build
+      - name: Native development build
         run: cargo build --locked --release
-      - name: Local-only process smoke and memory sample
+      - name: Local-only process smoke
         run: python3 scripts/smoke.py --binary target/release/pay-lmm | tee smoke-report.json
-      - name: Summarize measured smoke results
+      - name: Check smoke results
         run: |
           python3 - <<'PY'
           import json
-          import os
           from pathlib import Path
-          report = json.loads(Path('smoke-report.json').read_text())
-          assert report['orders'] == report['verified_notifications'] == 64
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## Local-only smoke results\n\n')
-              summary.write('Synthetic ePay callbacks; no live payment provider. Not a capacity benchmark.\n\n')
-              summary.write('```json\n' + json.dumps(report, indent=2) + '\n```\n')
+          result = json.loads(Path('smoke-report.json').read_text())
+          assert result['orders'] == result['verified_notifications'] == 64
           PY
-      - name: Save Linux binary and smoke report
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Save development report (not a portable release binary)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: pay-lmm-linux-amd64
+          name: development-smoke
           if-no-files-found: error
-          path: |
-            target/release/pay-lmm
-            smoke-report.json
+          path: smoke-report.json

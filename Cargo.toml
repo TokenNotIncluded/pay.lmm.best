@@ -10,7 +10,7 @@ repository = "https://github.com/TokenNotIncluded/pay.lmm.best"
 [dependencies]
 anyhow = "1"
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
-base64 = "0.22"
+base64 = "0.23"
 fs2 = "0.4"
 hex = "0.4"
 md-5 = "0.10"

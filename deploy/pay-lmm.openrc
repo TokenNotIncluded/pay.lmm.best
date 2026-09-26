@@ -1,0 +1,29 @@
+#!/sbin/openrc-run
+name="pay-lmm"
+description="Payment gateway protocol aggregation only"
+command="/usr/bin/pay-lmm"
+command_args="--config /etc/pay.lmm.best/config.toml"
+command_user="pay-lmm:pay-lmm"
+directory="/var/lib/pay-lmm"
+command_background="yes"
+pidfile="/run/pay-lmm.pid"
+umask="0077"
+output_log="/var/lib/pay-lmm/stdout.log"
+error_log="/var/lib/pay-lmm/stderr.log"
+
+depend() {
+    need net
+    after firewall
+}
+
+start_pre() {
+    if [ ! -r /etc/pay.lmm.best/config.toml ] || [ ! -r /etc/pay.lmm.best/secrets.env ]; then
+        eerror "Configure config.toml and secrets.env before starting pay-lmm"
+        return 1
+    fi
+    # Operator-owned shell assignments only. This file must be root-owned mode 0600.
+    set -a
+    . /etc/pay.lmm.best/secrets.env
+    set +a
+    checkpath --directory --owner pay-lmm:pay-lmm --mode 0700 /var/lib/pay-lmm
+}

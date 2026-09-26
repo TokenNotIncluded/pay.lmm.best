@@ -1,4 +1,5 @@
 /target/
+/dist/
 /data/
 .env
 .env.*
@@ -9,3 +10,5 @@ config.toml
 *.sqlite*
 *.db*
 *.lockfile
+__pycache__/
+/package-report*.json

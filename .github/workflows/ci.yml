@@ -4,6 +4,9 @@ on:
   pull_request:
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -12,15 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Install build prerequisites
         run: sudo apt-get update -qq && sudo apt-get install -y protobuf-compiler openssl
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
+          toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: Format working tree
-        run: cargo fmt --all
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
       - name: Tests
         run: cargo test --locked --all-targets
       - name: Clippy
@@ -29,42 +35,24 @@ jobs:
         run: cargo build --locked --release
       - name: Local-only process smoke and memory sample
         run: python3 scripts/smoke.py --binary target/release/pay-lmm | tee smoke-report.json
-      - name: Save formatted source and lockfile
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-and-lock
-          path: |
-            Cargo.lock
-            src/
-            tests/
-            build.rs
+      - name: Summarize measured smoke results
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report = json.loads(Path('smoke-report.json').read_text())
+          assert report['orders'] == report['verified_notifications'] == 64
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('## Local-only smoke results\n\n')
+              summary.write('Synthetic ePay callbacks; no live payment provider. Not a capacity benchmark.\n\n')
+              summary.write('```json\n' + json.dumps(report, indent=2) + '\n```\n')
+          PY
       - name: Save Linux binary and smoke report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pay-lmm-linux-amd64
+          if-no-files-found: error
           path: |
             target/release/pay-lmm
             smoke-report.json
-  # Temporary initialization job; removed after final source formatting is committed.
-  normalize:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: source-and-lock
-          path: .
-      - name: Commit validated source formatting
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Cargo.lock src tests build.rs
-          if ! git diff --cached --quiet; then
-            git commit -m 'style: format validated integration tests'
-            git push
-          fi

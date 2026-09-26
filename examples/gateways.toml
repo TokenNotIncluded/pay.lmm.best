@@ -45,6 +45,7 @@ alias = "credits"
 id = "prod_REPLACE"
 currency = "USD"
 # The upstream product must be onetime, active and tax inclusive, without B2B net pricing.
+# Callback order.amount_paid is REQUIRED; legacy amount-only payloads fail closed.
 
 [[gateways]]
 id = "lemon-test"

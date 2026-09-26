@@ -143,8 +143,28 @@ impl Adapter for Creem {
             text(data, "request_id")? == payment_id,
             "checkout_reference_mismatch",
         )?;
-        let amount = number(order, "amount")?;
-        require(amount > 0, "invalid_amount")?;
+        // List price is not proof of collection: discounts and tax adjustments can differ.
+        // A legacy payload without explicit paid evidence must not fulfill an order.
+        let amount = number(order, "amount_paid")?;
+        require(
+            amount > 0 && number(order, "amount")? == amount,
+            "charged_total_mismatch",
+        )?;
+        if order.get("amount_due").is_some() {
+            require(
+                number(order, "amount_due")? == amount,
+                "unpaid_order_balance",
+            )?;
+        }
+        if order.get("discount_amount").is_some() {
+            require(
+                number(order, "discount_amount")? == 0,
+                "discount_not_supported",
+            )?;
+        }
+        if order.get("refunded_amount").is_some() {
+            require(number(order, "refunded_amount")? == 0, "refunded_order")?;
+        }
         let order_id = id_field(order, "id")?;
         Ok(Some(VerifiedEvent {
             id: id_field(&event, "id")?,

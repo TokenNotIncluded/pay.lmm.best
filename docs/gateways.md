@@ -60,7 +60,7 @@ Stripe 返回的收银台 URL 可能包含 `#`。现在仅浏览器跳转 URL �
 
 使用官方 `custom_price` 覆盖本次一次性商品价格，`units=1`。当前支持金额 100–99,999,999，单位为配置币种的分；仅支持两位小数币种。Creem 的 `request_id` 用作订单关联，**不宣称它具备上游幂等保证**；本地持久化幂等与不自动重发策略仍然生效。
 
-回调检查原始正文 `creem-signature` HMAC-SHA256、checkout/order 环境、onetime 类型、商品 ID、paid 状态和实际订单金额。字符串和展开对象两种商品字段形式均能解析。发生优惠折扣或其他导致实际金额不同的调整时不确认成功，请在账户侧禁用这类流程并用沙箱验证。
+回调检查原始正文 `creem-signature` HMAC-SHA256、checkout/order 环境、onetime 类型、商品 ID、paid 状态和 `order.amount_paid` 实付金额。实付必须与含税标价及本地订单金额一致；存在 `amount_due` 时也必须一致，非零折扣或已退款金额会被拒绝。缺少 `amount_paid` 的旧载荷不会退回使用标价 `amount`，而是保留待核对状态。字符串和展开对象两种商品字段形式均能解析。发生优惠折扣或其他导致实际金额不同的调整时不确认成功，请在账户侧禁用这类流程并用沙箱验证。
 
 ## Lemon Squeezy
 
@@ -97,3 +97,7 @@ Stripe/Creem/Lemon Squeezy 的 webhook secret 同时用于带用途隔离的订�
 - Stripe：[创建 Checkout Session](https://docs.stripe.com/api/checkout/sessions/create)、[Webhook 验签与投递](https://docs.stripe.com/webhooks)、[Basil API 版本](https://docs.stripe.com/changelog/basil)。
 - Creem：[创建 Checkout](https://docs.creem.io/api-reference/endpoint/create-checkout)、[读取商品](https://docs.creem.io/api-reference/endpoint/get-product)、[Webhook 签名和载荷](https://docs.creem.io/code/webhooks)、[测试环境](https://docs.creem.io/getting-started/test-mode)。
 - Lemon Squeezy：[创建 Checkout](https://docs.lemonsqueezy.com/api/checkouts/create-checkout)、[订单字段](https://docs.lemonsqueezy.com/api/orders/the-order-object)、[Variant 字段](https://docs.lemonsqueezy.com/api/variants/the-variant-object)、[店铺字段](https://docs.lemonsqueezy.com/api/stores/the-store-object)、[Webhook 验签](https://docs.lemonsqueezy.com/help/webhooks/signing-requests)。
+
+### Creem 金额证据兼容要求
+
+Creem 接入必须提供明确的 `order.amount_paid`。官方旧 webhook 示例只有 `amount`，不能据此证明最终实付金额；本实现对这类旧载荷拒绝确认成功。部署前请从实际沙箱事件验证金额字段，不要删掉此校验来迁就示例。当前没有通过交易查询补全旧载荷的自动流程。专项测试覆盖少付、多付、零支付、缺字段、折扣和退款，但不替代真实上游联调。

@@ -269,7 +269,7 @@ fn event(kind: &str, meta: Value, n: u32) -> Value {
             json!({"id":format!("evt_{n}"),"type":"checkout.session.completed","livemode":false,"data":{"object":{"id":format!("cs_test_{n}"),"object":"checkout.session","mode":"payment","status":"complete","payment_status":"paid","livemode":false,"amount_total":1230,"amount_subtotal":1230,"currency":"usd","payment_intent":format!("pi_{n}"),"client_reference_id":meta["pay_lmm_payment_id"],"metadata":meta,"total_details":{"amount_discount":0,"amount_shipping":0,"amount_tax":0}}}})
         }
         "creem" => {
-            json!({"id":format!("evt_{n}"),"eventType":"checkout.completed","created_at":1,"object":{"id":format!("ch_{n}"),"object":"checkout","mode":"test","status":"completed","product":"prod_credits","request_id":meta["pay_lmm_payment_id"],"metadata":meta,"order":{"id":format!("ord_{n}"),"mode":"test","product":"prod_credits","amount":1230,"currency":"USD","status":"paid","type":"onetime"}}})
+            json!({"id":format!("evt_{n}"),"eventType":"checkout.completed","created_at":1,"object":{"id":format!("ch_{n}"),"object":"checkout","mode":"test","status":"completed","product":"prod_credits","request_id":meta["pay_lmm_payment_id"],"metadata":meta,"order":{"id":format!("ord_{n}"),"mode":"test","product":"prod_credits","amount":1230,"amount_paid":1230,"amount_due":1230,"discount_amount":0,"currency":"USD","status":"paid","type":"onetime"}}})
         }
         _ => {
             json!({"meta":{"event_name":"order_created","custom_data":meta},"data":{"type":"orders","id":n.to_string(),"attributes":{"store_id":123,"currency":"USD","status":"paid","refunded":false,"test_mode":true,"subtotal":1230,"discount_total":0,"tax":246,"total":1476,"tax_inclusive":false,"first_order_item":{"order_id":n,"variant_id":456}}}})
@@ -600,4 +600,54 @@ fn browser_fragment_does_not_weaken_outbound_ssrf_policy() {
         )
         .is_err()
     );
+}
+
+#[tokio::test]
+async fn creem_requires_collected_money_not_only_a_list_price() {
+    let h = harness("creem").await;
+    let p = create(&h, "creem", "paid-evidence").await;
+    let e = event("creem", h.upstream.captured.lock().await.clone(), 1);
+    for (field, value) in [
+        ("amount_paid", json!(0)),
+        ("amount_paid", json!(1229)),
+        ("amount_paid", json!(1231)),
+        ("amount_paid", Value::Null),
+        ("amount_due", json!(1231)),
+        ("discount_amount", json!(1)),
+        ("refunded_amount", json!(1)),
+    ] {
+        let mut bad = e.clone();
+        bad["object"]["order"][field] = value;
+        assert!(
+            send(&h, "creem", &bad).await.is_client_error(),
+            "accepted {field}"
+        );
+        assert_eq!(
+            h.service.db.get("app", &p.id).await.unwrap().status,
+            "pending"
+        );
+    }
+    let mut old = e.clone();
+    old["object"]["order"]
+        .as_object_mut()
+        .unwrap()
+        .remove("amount_paid");
+    assert!(send(&h, "creem", &old).await.is_client_error());
+    assert_eq!(send(&h, "creem", &e).await, StatusCode::OK);
+    assert_eq!(
+        h.service.db.get("app", &p.id).await.unwrap().charged_minor,
+        1230
+    );
+}
+
+#[test]
+fn documented_configuration_examples_validate_without_loading_secrets() {
+    for source in [
+        include_str!("../examples/config.toml"),
+        include_str!("../examples/waffo.toml"),
+        include_str!("../examples/gateways.toml"),
+    ] {
+        let c: Config = toml::from_str(source).unwrap();
+        c.validate().unwrap();
+    }
 }

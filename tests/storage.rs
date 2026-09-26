@@ -46,6 +46,9 @@ fn event(payment: &str, id: &str) -> VerifiedEvent {
         total_minor: 100,
         subtotal_minor: Some(100),
         charged_minor: 100,
+        checkout_id: None,
+        product: None,
+        request_hash: None,
     }
 }
 #[tokio::test]
@@ -207,4 +210,44 @@ async fn subtotal_is_explicit_and_missing_evidence_cannot_pay_an_order() {
     let p = db.get("merchant", "pay_1").await.unwrap();
     assert_eq!(p.amount_minor, 100);
     assert_eq!(p.charged_minor, 110);
+}
+
+#[tokio::test]
+async fn hosted_checkout_references_products_and_early_sessions_are_bound() {
+    let db = Database::open(":memory:", 512).unwrap();
+    let mut r = record("pay_bound");
+    r.input.product = "credits".into();
+    db.reserve(r).await.unwrap();
+    let mut e = event("pay_bound", "evt_bound");
+    e.checkout_id = Some("cs_1".into());
+    e.product = Some("wrong".into());
+    e.request_hash = Some("hash-pay_bound".into());
+    assert!(db.accept("gateway", "identity", e.clone()).await.is_err());
+    e.product = Some("credits".into());
+    e.request_hash = Some("wrong".into());
+    assert!(db.accept("gateway", "identity", e.clone()).await.is_err());
+    e.request_hash = Some("hash-pay_bound".into());
+    db.accept("gateway", "identity", e).await.unwrap();
+    assert!(
+        db.finish_create(
+            "pay_bound",
+            Some(Checkout {
+                url: "https://checkout.example".into(),
+                session_id: "cs_other".into()
+            })
+        )
+        .await
+        .is_err()
+    );
+    let p = db
+        .finish_create(
+            "pay_bound",
+            Some(Checkout {
+                url: "https://checkout.example".into(),
+                session_id: "cs_1".into(),
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(p.status, "succeeded");
 }

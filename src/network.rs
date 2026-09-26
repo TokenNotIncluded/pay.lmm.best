@@ -62,7 +62,12 @@ pub fn safe_url(value: &str, dev: bool) -> Result<Url> {
     Ok(u)
 }
 pub fn checkout_url(value: &str, origins: &[String], dev: bool) -> Result<String> {
-    let u = safe_url(value, dev)?;
+    // Fragments belong to the browser (Stripe includes one); never sent by our HTTP client.
+    require(value.len() <= 8192, "url_too_long")?;
+    let mut u = Url::parse(value).map_err(|_| Error::invalid("invalid_url"))?;
+    let fragment = u.fragment().map(str::to_owned);
+    u.set_fragment(None);
+    let mut u = safe_url(u.as_str(), dev)?;
     let origin = u.origin().ascii_serialization();
     require(
         origins
@@ -70,6 +75,7 @@ pub fn checkout_url(value: &str, origins: &[String], dev: bool) -> Result<String
             .any(|s| Url::parse(s).is_ok_and(|a| a.origin().ascii_serialization() == origin)),
         "checkout_origin_not_allowed",
     )?;
+    u.set_fragment(fragment.as_deref());
     Ok(u.into())
 }
 #[derive(Debug)]
@@ -121,6 +127,9 @@ impl SafeClient {
             dev,
             max_response,
         })
+    }
+    pub fn get(&self, url: &str) -> Result<RequestBuilder> {
+        Ok(self.client.get(safe_url(url, self.dev)?))
     }
     pub fn post(&self, url: &str) -> Result<RequestBuilder> {
         Ok(self.client.post(safe_url(url, self.dev)?))

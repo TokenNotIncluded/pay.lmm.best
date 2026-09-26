@@ -181,6 +181,11 @@ impl Database {
             let mut r = record(&tx, &id)?;
             match checkout {
                 Some(v) => {
+                    // A verified callback may have arrived before this API response.
+                    require(
+                        r.session_id.is_empty() || r.session_id == v.session_id,
+                        "checkout_session_mismatch",
+                    )?;
                     r.payment.checkout_url = v.url;
                     r.session_id = v.session_id;
                     if r.payment.status == "creating" {
@@ -209,6 +214,12 @@ impl Database {
             let mut r=record(&tx,&e.payment_id)?;
             if r.payment.gateway_id != gid || r.gateway_identity != identity {return Err(Error::conflict("gateway_identity_mismatch"));}
             require(r.payment.currency==e.currency, "currency_mismatch")?;
+            require(e.product.as_ref().is_none_or(|p|p==&r.input.product), "product_mismatch")?;
+            require(e.request_hash.as_ref().is_none_or(|h|h==&r.request_hash), "checkout_reference_mismatch")?;
+            if let Some(checkout_id)=&e.checkout_id {
+                require(r.session_id.is_empty() || &r.session_id==checkout_id, "checkout_session_mismatch")?;
+                r.session_id=checkout_id.clone();
+            }
             require(e.method.as_ref().is_none_or(|m|m==&r.input.method), "method_mismatch")?;
             require(e.total_minor>0 && e.charged_minor==e.total_minor, "charged_total_mismatch")?;
             let expected=match r.payment.amount_basis.as_str() {"total"=>Some(e.total_minor),"subtotal"=>e.subtotal_minor,_=>None};

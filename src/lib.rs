@@ -5,6 +5,7 @@ pub mod error;
 pub mod gateway;
 pub mod money;
 pub mod network;
+pub mod providers;
 pub mod service;
 pub mod store;
 

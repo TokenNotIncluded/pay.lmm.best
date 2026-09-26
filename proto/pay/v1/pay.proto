@@ -8,7 +8,7 @@ message CreatePaymentRequest {
   string currency = 3;
   string method = 4;
   string gateway_id = 5; // Empty selects the merchant's configured default.
-  string product = 6; // Required Waffo product alias; unused by ePay.
+  string product = 6; // Product alias for Waffo/Creem/Lemon Squeezy; empty for ePay/Stripe.
   string description = 7;
 }
 message Payment {

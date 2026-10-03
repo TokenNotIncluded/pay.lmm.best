@@ -60,7 +60,7 @@ jobs:
         run: |
           docker build --build-arg TARGETARCH='${{ matrix.arch }}' --build-arg VERSION="$(python3 packaging/package.py version)" --build-arg REVISION="$GITHUB_SHA" -t pay-lmm:test .
           python3 packaging/test-image.py pay-lmm:test
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: packages-${{ matrix.arch }}
           if-no-files-found: error
@@ -70,7 +70,7 @@ jobs:
             dist/*.rpm
             dist/*.build.json
             dist/checksums-*.txt
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: qa-packages-${{ matrix.arch }}
           path: |
@@ -78,7 +78,7 @@ jobs:
             qa/*.rpm
             qa/*.build.json
             qa/checksums-*.txt
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: memory-sample-${{ matrix.arch }}
           path: package-report-${{ matrix.arch }}.json
@@ -130,7 +130,7 @@ jobs:
           python3 packaging/package.py assemble
           (cd dist && sha256sum -c SHA256SUMS)
           printf '## Linux distribution packages\n\nBoth native musl builds, 13 distribution/architecture combinations and non-root scratch images passed.\n\nOnly version tags publish a release.\n' >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-assets
           if-no-files-found: error

@@ -1,7 +1,10 @@
 [Unit]
 Description=pay.lmm.best payment gateway protocol aggregation service
+Documentation=https://github.com/TokenNotIncluded/pay.lmm.best
 After=network-online.target
 Wants=network-online.target
+ConditionPathExists=/etc/pay.lmm.best/config.toml
+ConditionPathExists=/etc/pay.lmm.best/secrets.env
 
 [Service]
 Type=simple
@@ -9,7 +12,7 @@ User=pay-lmm
 Group=pay-lmm
 WorkingDirectory=/var/lib/pay-lmm
 EnvironmentFile=/etc/pay.lmm.best/secrets.env
-ExecStart=/usr/local/bin/pay-lmm --config /etc/pay.lmm.best/config.toml
+ExecStart=/usr/bin/pay-lmm --config /etc/pay.lmm.best/config.toml
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
@@ -25,7 +28,6 @@ LockPersonality=true
 MemoryDenyWriteExecute=true
 TasksMax=32
 LimitNOFILE=1024
-# Measure your workload before tightening this limit. It is not a claimed RSS figure.
 MemoryMax=256M
 
 [Install]

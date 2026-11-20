@@ -1,0 +1,22 @@
+services:
+  pay-lmm:
+    image: ${PAY_LMM_IMAGE:-pay-lmm:local}
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - '127.0.0.1:8080:8080'
+    env_file:
+      - ./secrets.env
+    volumes:
+      - ./config.toml:/etc/pay.lmm.best/config.toml:ro
+      - pay-data:/var/lib/pay-lmm
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,mode=1777
+    stop_grace_period: 30s
+    pids_limit: 32
+    mem_limit: 256m
+volumes:
+  pay-data:

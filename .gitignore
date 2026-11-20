@@ -1,11 +1,16 @@
 /target/
+/dist/
+/qa/
 /data/
 .env
 .env.*
 !.env.example
 config.toml
+secrets.env
 *.pem
 *.key
 *.sqlite*
 *.db*
 *.lockfile
+__pycache__/
+/package-report*.json

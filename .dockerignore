@@ -1,9 +1,10 @@
-.git
-target
-data
-config.toml
-.env
-.env.*
-*.pem
-*.key
-*.sqlite*
+# The image consumes only a checked binary and an empty state directory.
+# Do not send source, checkout credentials, config, secrets, or databases to a builder.
+**
+!Dockerfile
+!dist
+!dist/container
+!dist/container/**
+!packaging
+!packaging/container-state
+!packaging/container-state/.keep

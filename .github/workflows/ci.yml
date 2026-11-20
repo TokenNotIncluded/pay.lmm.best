@@ -4,67 +4,51 @@ on:
   pull_request:
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - name: Install build prerequisites
         run: sudo apt-get update -qq && sudo apt-get install -y protobuf-compiler openssl
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Read pinned toolchain
+        id: rust
+        run: python3 -c 'import tomllib; print("version=" + tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])' >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
         with:
+          toolchain: ${{ steps.rust.outputs.version }}
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: Format working tree
-        run: cargo fmt --all
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+      - name: Check formatting
+        run: cargo fmt --all -- --check
       - name: Tests
         run: cargo test --locked --all-targets
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
-      - name: Release build
+      - name: Native development build
         run: cargo build --locked --release
-      - name: Local-only process smoke and memory sample
+      - name: Local-only process smoke
         run: python3 scripts/smoke.py --binary target/release/pay-lmm | tee smoke-report.json
-      - name: Save formatted source and lockfile
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: source-and-lock
-          path: |
-            Cargo.lock
-            src/
-            tests/
-            build.rs
-      - name: Save Linux binary and smoke report
-        uses: actions/upload-artifact@v4
-        with:
-          name: pay-lmm-linux-amd64
-          path: |
-            target/release/pay-lmm
-            smoke-report.json
-  # Temporary initialization job; removed after final source formatting is committed.
-  normalize:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: source-and-lock
-          path: .
-      - name: Commit validated source formatting
+      - name: Check smoke results
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Cargo.lock src tests build.rs
-          if ! git diff --cached --quiet; then
-            git commit -m 'style: format validated integration tests'
-            git push
-          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('smoke-report.json').read_text())
+          assert result['orders'] == result['verified_notifications'] == 64
+          PY
+      - name: Save development report (not a portable release binary)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: development-smoke
+          if-no-files-found: error
+          path: smoke-report.json

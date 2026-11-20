@@ -1,0 +1,191 @@
+name: Packages
+on:
+  push:
+    branches: [main, work/packaging]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+jobs:
+  build:
+    name: Static build / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - arch: arm64
+            target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install native packaging tools
+        run: sudo apt-get update -qq && sudo apt-get install -y build-essential musl-tools protobuf-compiler openssl rpm dpkg-dev xz-utils
+      - name: Read pinned toolchain
+        id: rust
+        run: python3 -c 'import tomllib; print("version=" + tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])' >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          key: musl-${{ matrix.arch }}
+      - name: Validate packaging and formatting
+        run: |
+          python3 -m unittest discover -s packaging/tests -v
+          cargo fmt --all -- --check
+      - name: Compile, test and lint the actual musl target
+        run: bash packaging/build.sh '${{ matrix.target }}' --test
+      - name: Produce deterministic archive and native packages
+        run: |
+          python3 packaging/package.py build --target '${{ matrix.target }}'
+          python3 packaging/package.py build --target '${{ matrix.target }}' --package-release 2 --formats deb rpm --output qa
+      - name: Native release process smoke
+        run: python3 scripts/smoke.py --binary 'target/${{ matrix.target }}/release/pay-lmm' | tee package-report-${{ matrix.arch }}.json
+      - name: Validate the exact packaged binary in scratch
+        run: |
+          docker build --build-arg TARGETARCH='${{ matrix.arch }}' --build-arg VERSION="$(python3 packaging/package.py version)" --build-arg REVISION="$GITHUB_SHA" -t pay-lmm:test .
+          python3 packaging/test-image.py pay-lmm:test
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: packages-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.build.json
+            dist/checksums-*.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: qa-packages-${{ matrix.arch }}
+          path: |
+            qa/*.deb
+            qa/*.rpm
+            qa/*.build.json
+            qa/checksums-*.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: memory-sample-${{ matrix.arch }}
+          path: package-report-${{ matrix.arch }}.json
+  distributions:
+    name: ${{ matrix.image }} / ${{ matrix.arch }}
+    needs: build
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        image: ['debian:12', 'ubuntu:22.04', 'fedora:43', 'rockylinux:9', 'opensuse/leap:16.0', 'alpine:3.22', 'archlinux:base']
+        exclude:
+          - arch: arm64
+            image: archlinux:base
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: packages-${{ matrix.arch }}
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: qa-packages-${{ matrix.arch }}
+          path: qa
+      - name: Installation, real process, upgrade and removal
+        env:
+          IMAGE: ${{ matrix.image }}
+          BUILD_ARCH: ${{ matrix.arch }}
+        run: docker run --rm --mount "type=bind,source=$PWD,target=/src,readonly" -e BUILD_ARCH="$BUILD_ARCH" "$IMAGE" sh /src/packaging/test-distro.sh
+  assemble:
+    name: Verify complete release asset set
+    needs: [build, distributions]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: dist
+      - name: Verify checksums, architecture, version and source revision
+        run: |
+          python3 packaging/package.py assemble
+          (cd dist && sha256sum -c SHA256SUMS)
+          printf '## Linux distribution packages\n\nBoth native musl builds, 13 distribution/architecture combinations and non-root scratch images passed.\n\nOnly version tags publish a release.\n' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-assets
+          if-no-files-found: error
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.build.json
+            dist/SHA256SUMS
+  publish:
+    name: Publish verified version tag
+    needs: assemble
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: dist
+      - name: Verify tag, ancestry and immutable assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(python3 packaging/package.py version)"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          # A network/authentication failure is NOT evidence that a release is absent.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name' > existing-releases.txt
+          if grep -Fxq -- "$GITHUB_REF_NAME" existing-releases.txt; then
+            echo 'A release already exists; refusing to replace published assets.' >&2
+            exit 1
+          fi
+          python3 packaging/package.py assemble
+      - name: Publish multi-architecture image from already-tested binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io' EXIT
+          docker buildx create --use --driver docker-container
+          docker buildx build --platform linux/amd64,linux/arm64 --build-arg VERSION="$(python3 packaging/package.py version)" --build-arg REVISION="$GITHUB_SHA" -t "$image:$GITHUB_REF_NAME" --push .
+          docker buildx imagetools inspect "$image:$GITHUB_REF_NAME" > image-manifest.txt
+      - name: Publish release assets after all checks succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=()
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then args+=(--prerelease --latest=false); fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "pay-lmm $GITHUB_REF_NAME" --generate-notes dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.build.json dist/SHA256SUMS image-manifest.txt
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${args[@]}"

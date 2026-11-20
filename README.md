@@ -18,24 +18,46 @@
 
 ## 当前支持
 
+已接入 **5 种上游协议**：ePay、Waffo Pancake、Stripe Checkout、Creem、Lemon Squeezy。新渠道共用现有 JSON / Protobuf API，没有新增运行时依赖。详细配置、支持边界和官方协议来源见 [网关接入指南](docs/gateways.md)。
+
 | 接口 / 适配器 | 已实现 | 明确不做 |
 | --- | --- | --- |
 | 统一 HTTP API | 创建订单、查询本地状态、商户渠道列表、死信重投 | 不宣称兼容上游的所有接口 |
 | Protocol Buffers | 同一路由上的二进制请求与响应，schema 在 `proto/pay/v1/pay.proto` | 当前不是 gRPC |
 | ePay v1 | `submit.php` 签名跳转、GET / POST 回调、MD5 兼容验签、CNY | 不自动换汇、不冒充支付宝或微信直连 |
 | Waffo Pancake | RSA-SHA256 创建一次性 checkout、显式商品映射、验签、店铺及环境绑定 | 不自动发布商品、不把订阅事件当一次性付款 |
+| Stripe Checkout | 一次性收银台、签名验真、延迟支付完成事件 | 不含 Connect、订阅、自动换汇或折扣 |
+| Creem | 一次性商品检查、自定义价格、HMAC 回调、测试/生产绑定 | 当前只接受含税价商品，不含订阅 |
+| Lemon Squeezy | JSON:API checkout、店铺/商品检查、预览金额验证、签名订单回调 | 单店铺币种、单商品，不含订阅/优惠券 |
 | 通知交付 | SQLite 事务 outbox、HMAC-SHA256、持久化去重、16 次投递、死信重投 | 不保证网络交付 exactly-once；接收方仍需按事件 ID 去重 |
 
 退款发起、订阅续费、上游主动查单、自动对账尚未实现，渠道能力接口明确返回 `false`，没有“成功返回”的占位实现。`GET /v1/payments/{id}` 返回的是**本地已验证状态**，不调用上游查单。
 
-## 运行
+## 标准发行包
 
-需要 Rust stable、C 编译器和 `protoc`。构建期的 Protobuf 工具不进入运行时。
+使用 **x86_64 / ARM64 静态 musl** 二进制，同一份程序打包为通用 `tar.gz`、`deb`、`rpm` 和无 shell、默认非 root 的 scratch 容器，不要求服务器安装 Rust、Python、protoc 或特定版本的 glibc。
 
 ```sh
-# Debian / Ubuntu 构建依赖
+make check       # Rust 与打包校验
+make build       # 本机架构静态构建
+make package     # tar.gz / deb / rpm / 构建信息 / SHA256
+make image       # 使用同一二进制生成本地镜像
+```
+
+版本来自 Cargo.toml，Rust 与 Cargo.lock 固定；标准包在 CI 中验证 ELF、架构、安装、升级、卸载、配置/数据库保留及实际模拟订单流程。发行版矩阵包含 Debian、Ubuntu、Fedora、Rocky、openSUSE、Alpine 与 Arch 的 13 个发行版/架构组合，具体边界见 [打包与发布指南](docs/packaging.md)。
+
+系统安装统一使用 `/etc/pay.lmm.best/` 和 `/var/lib/pay-lmm/`。提供 systemd 与 OpenRC，安装不自动启动服务，升级不覆盖密钥和数据库，也不擅自重启进程。
+
+普通提交生成 CI artifacts；**只有与版本一致的标签**通过全部门禁后，才公开 GitHub Release 并推送对应版本的双架构 GHCR 镜像。配置好流程不等于已经发布版本或部署服务。完整安装命令、构建依赖、校验与旧部署迁移说明见 [docs/packaging.md](docs/packaging.md)。
+
+## 本机开发运行
+
+使用 `rust-toolchain.toml` 指定的 Rust、C 编译器和 `protoc`。下面的本机构建用于开发；跨发行版部署请使用上面的标准发行流程。
+
+```sh
+# Debian / Ubuntu 开发依赖
 sudo apt-get install build-essential protobuf-compiler
-cargo build --release
+cargo build --locked --release
 
 cp examples/config.toml config.toml
 # 编辑 config.toml：填入真实上游地址、自己的商户号及回调地址。
@@ -116,13 +138,11 @@ printf '%s\n' 'merchant_order_id: "protobuf-001" amount_minor: 1230 currency: "C
 ## 开发
 
 ```sh
-cargo fmt --all -- --check
-cargo test --all-targets
-cargo clippy --all-targets -- -D warnings
+make check
 ```
 
 领域模型与 HTTP 编码分开，`gateway::Adapter` 负责 `prepare / create / verify`，不允许适配器直接写业务数据库。扩展协议时同时补上签名、金额、失败行为和回调测试，再更新能力表，不用一套通用签名函数猜所有网关协议。
 
 协议依据：Waffo 官方 [Go SDK](https://github.com/waffo-com/waffo-pancake-sdk-go) 的签名、checkout 与 webhook 定义；ePay 兼容接口参考 [go-epay](https://github.com/Calcium-Ion/go-epay)。不同 ePay 部署可能有方言差异，上线前必须用自己的上游沙箱验收。本仓库的模拟网关测试不能代替真实商户联调。
 
-MIT License · [Security](SECURITY.md) · [Architecture](docs/architecture.md)
+MIT License · [Security](SECURITY.md) · [Architecture](docs/architecture.md) · [Packaging](docs/packaging.md)

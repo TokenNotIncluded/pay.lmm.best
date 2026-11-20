@@ -14,7 +14,7 @@ use serde_json::json;
 use std::{collections::BTreeMap, future::Future, pin::Pin};
 use zeroize::Zeroizing;
 
-type FutureResult<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
+pub(crate) type FutureResult<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 pub struct Checkout {
     pub url: String,
     pub session_id: String,
@@ -31,6 +31,9 @@ pub struct VerifiedEvent {
     pub total_minor: i64,
     pub subtotal_minor: Option<i64>,
     pub charged_minor: i64,
+    pub checkout_id: Option<String>,
+    pub product: Option<String>,
+    pub request_hash: Option<String>,
 }
 // Adapters cannot write storage or grant business entitlements.
 pub trait Adapter: Send + Sync {
@@ -62,6 +65,9 @@ impl Gateway {
     ) -> anyhow::Result<Self> {
         let identity = crypto::hash(&serde_json::to_vec(&config)?);
         let adapter: Box<dyn Adapter> = match config.protocol {
+            Protocol::Stripe | Protocol::Creem | Protocol::LemonSqueezy => {
+                crate::providers::build(&config, dev, load)?
+            }
             Protocol::Epay => {
                 let c = config
                     .epay
@@ -102,12 +108,7 @@ impl Gateway {
             protocol: self.config.protocol.as_str().into(),
             currencies: self.config.currencies.clone(),
             methods: self.config.methods.clone(),
-            products: self
-                .config
-                .waffo
-                .as_ref()
-                .map(|c| c.products.iter().map(|p| p.alias.clone()).collect())
-                .unwrap_or_default(),
+            products: crate::providers::product_aliases(&self.config),
             checkout: true,
             signed_webhook: true,
             refunds: false,
@@ -262,6 +263,9 @@ impl Adapter for Epay {
             total_minor: amount,
             subtotal_minor: Some(amount),
             charged_minor: amount,
+            checkout_id: None,
+            product: None,
+            request_hash: None,
         }))
     }
 }
@@ -459,6 +463,9 @@ impl Adapter for Waffo {
             total_minor: total,
             subtotal_minor: subtotal,
             charged_minor: charged,
+            checkout_id: None,
+            product: None,
+            request_hash: None,
         }))
     }
 }

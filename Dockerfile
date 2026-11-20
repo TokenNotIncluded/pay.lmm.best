@@ -1,14 +1,19 @@
-FROM rust:slim-bookworm AS build
-RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler build-essential && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY . .
-RUN cargo build --release --locked
-
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home pay && mkdir -p /var/lib/pay /etc/pay.lmm.best && chown pay:pay /var/lib/pay
-COPY --from=build /app/target/release/pay-lmm /usr/local/bin/pay-lmm
+# Build once with `make package`; the image contains the SAME checked musl binary.
+# A multi-platform publish supplies both dist/container/amd64 and /arm64.
+FROM scratch
+ARG TARGETARCH
+ARG VERSION=development
+ARG REVISION=unknown
+LABEL org.opencontainers.image.title="pay.lmm.best" \
+      org.opencontainers.image.description="Payment gateway protocol aggregation only; no payment processing or funds custody" \
+      org.opencontainers.image.source="https://github.com/TokenNotIncluded/pay.lmm.best" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.revision=$REVISION
+COPY --chmod=0555 dist/container/${TARGETARCH}/pay-lmm /usr/bin/pay-lmm
+COPY --chown=10001:10001 packaging/container-state/ /var/lib/pay-lmm/
 USER 10001:10001
-WORKDIR /var/lib/pay
+WORKDIR /var/lib/pay-lmm
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/pay-lmm"]
+ENTRYPOINT ["/usr/bin/pay-lmm"]
 CMD ["--config", "/etc/pay.lmm.best/config.toml"]
